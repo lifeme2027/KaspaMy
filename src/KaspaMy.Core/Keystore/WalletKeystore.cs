@@ -8,7 +8,13 @@ namespace KaspaMy.Core.Keystore;
 
 public sealed class WrongPasswordException : Exception
 {
-    public WrongPasswordException() : base("Wrong password or corrupted keystore.") { }
+    public WrongPasswordException(string message = "Wrong password.") : base(message) { }
+}
+
+/// <summary>F8: integrity checksum mismatch — the file was edited or damaged (independent of the password).</summary>
+public sealed class KeystoreTamperedException : IOException
+{
+    public KeystoreTamperedException() : base("The wallet file was modified or damaged (integrity check failed). Restore it from backup or re-import your recovery phrase.") { }
 }
 
 /// <summary>The wallet file is unreadable, tampered with, or in an unsupported format. Message is user-safe.</summary>
@@ -73,6 +79,7 @@ public static class WalletKeystore
         file.Nonce = Convert.ToBase64String(nonce);
         file.Ciphertext = Convert.ToBase64String(cipher);
         file.Tag = Convert.ToBase64String(tag);
+        file.Checksum = ComputeChecksum(file);
         return file;
     }
 
@@ -81,6 +88,8 @@ public static class WalletKeystore
     {
         if (file.Version != 1 || file.Kdf != "argon2id" || file.Cipher != "aes-256-gcm")
             throw new KeystoreCorruptException("unsupported format");
+        VerifyChecksum(file);
+        if (string.IsNullOrEmpty(password)) throw new ArgumentException("Password is empty.");
         var kdf = new KdfParameters(file.Argon2MemoryKiB, file.Argon2Iterations, file.Argon2Parallelism);
         kdf.Validate();
         byte[] salt, nonce, cipher, tag;
@@ -101,7 +110,8 @@ public static class WalletKeystore
         }
         catch (AuthenticationTagMismatchException)
         {
-            throw new WrongPasswordException();
+            // Checksum verified above (if present): a tag failure now almost certainly means a wrong password.
+            throw file.Checksum is null ? new WrongPasswordException("Wrong password, or the wallet file was modified.") : new WrongPasswordException();
         }
         finally
         {
@@ -125,19 +135,64 @@ public static class WalletKeystore
         return acc;
     }
 
-    public static void Save(KeystoreFile file, string path)
+    /// <summary>F8: throws <see cref="KeystoreTamperedException"/> if the checksum is present and wrong.</summary>
+    public static void VerifyChecksum(KeystoreFile file)
+    {
+        if (file.Checksum is null) return; // pre-checksum file (KasNetWallet / KaspaMy d4f89d6)
+        var expected = Encoding.ASCII.GetBytes(ComputeChecksum(file));
+        var actual = Encoding.ASCII.GetBytes(file.Checksum);
+        if (!CryptographicOperations.FixedTimeEquals(expected, actual)) throw new KeystoreTamperedException();
+    }
+
+    internal static string ComputeChecksum(KeystoreFile f)
+    {
+        var canon = string.Join("\n", "kaspamy-keystore-checksum-v1", f.Version, f.Kdf, f.Argon2MemoryKiB, f.Argon2Iterations, f.Argon2Parallelism,
+            f.Salt, f.Cipher, f.Nonce, f.Ciphertext, f.Tag, f.Network, f.Address, f.CreatedUtc.ToUnixTimeMilliseconds());
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canon))).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// F1: creates <paramref name="path"/> atomically and never overwrites it. The content goes to a unique temp file
+    /// which is then moved with overwrite:false (link+unlink on Unix), so a concurrent writer can never replace an
+    /// existing wallet and no reader sees a half-written file. Throws <see cref="IOException"/> if the target exists.
+    /// </summary>
+    public static void SaveNew(KeystoreFile file, string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var tmp = path + ".tmp";
-        WriteOwnerOnly(tmp, JsonSerializer.Serialize(file, Opts));
-        File.Move(tmp, path, overwrite: true);
+        var tmp = $"{path}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            WriteOwnerOnly(tmp, JsonSerializer.Serialize(file, Opts));
+            PublishNoReplace(tmp, path);
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    // File.Move(overwrite:false) is check-then-rename on Unix (racy), so use link(2), which fails atomically with EEXIST.
+    [System.Runtime.InteropServices.DllImport("libc", SetLastError = true, EntryPoint = "link")]
+    private static extern int SysLink(string oldPath, string newPath);
+
+    /// <summary>Atomically makes <paramref name="tmp"/> visible as <paramref name="path"/>; throws IOException if it already exists.</summary>
+    private static void PublishNoReplace(string tmp, string path)
+    {
+        if (OperatingSystem.IsWindows()) { File.Move(tmp, path, overwrite: false); return; } // MoveFileEx without REPLACE_EXISTING is atomic
+        if (SysLink(tmp, path) == 0) return;
+        var errno = System.Runtime.InteropServices.Marshal.GetLastPInvokeError();
+        if (errno == 17) throw new IOException("The wallet file already exists."); // EEXIST
+        // Filesystem without hard links: O_CREAT|O_EXCL on the final path is still atomic-exclusive.
+        using (var src = File.OpenRead(tmp))
+        using (var dst = new FileStream(path, new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite }))
+        { src.CopyTo(dst); dst.Flush(true); }
     }
 
     /// <summary>Writes a file readable only by the current user on Linux/macOS (0600). Windows: inherits the %APPDATA% ACL.</summary>
     public static void WriteOwnerOnly(string path, string contents)
     {
         if (OperatingSystem.IsWindows()) { File.WriteAllText(path, contents); return; }
-        var opts = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write, UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite };
+        var opts = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite };
         using (var fs = new FileStream(path, opts)) using (var w = new StreamWriter(fs)) w.Write(contents);
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }

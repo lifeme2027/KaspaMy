@@ -24,7 +24,7 @@ public static class CliApp
 
     public const string ExportConfirmPhrase = "I UNDERSTAND";
 
-    private static readonly HashSet<string> Flags = new() { "--json", "--yes", "-y", "--help", "-h", "--verbose", "--send-max" };
+    private static readonly HashSet<string> Flags = new() { "--json", "--yes", "-y", "--help", "-h", "--verbose" };
 
     public static async Task<int> RunAsync(string[] args, IConsoleIO io, CancellationToken ct = default)
     {
@@ -41,9 +41,9 @@ public static class CliApp
             {
                 "create" => Create(io, net, opts),
                 "import" => Import(io, net),
-                "address" => WalletService.Status(net),
-                "status" => WalletService.Status(net),
-                "balance" => await Balance(net, node, ct),
+                "address" => WalletService.Info(net, Password(io, confirm: false)), // F2: decrypt + verify
+                "status" => WalletService.Status(net),                               // header only, addressVerified=false
+                "balance" => await Balance(io, net, node, ct),
                 "fee" or "estimate-fee" => await Fee(net, node, ct),
                 "validate" or "validate-address" => AddressValidator.Validate(Arg(pos, 0, "address"), netGiven ? net : null),
                 "send" => await Send(io, net, netGiven, node, opts, pos, json, ct),
@@ -56,18 +56,14 @@ public static class CliApp
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            var msg = ex switch
-            {
-                WrongPasswordException => "Wrong password.",
-                _ => SecretRedactor.Redact(ex.Message),
-            };
+            var msg = ErrorText.Safe(ex); // F7: no inner messages or stack traces
             Emit(io, json, cmd, false, null, msg);
             return ex is UsageException ? 64 : 1;
         }
     }
 
     private sealed record Cancelled(string Reason);
-    private sealed class UsageException : Exception { public UsageException(string m) : base(m) { } }
+    private sealed class UsageException : UserException { public UsageException(string m) : base(m) { } }
 
     private static (string? cmd, Dictionary<string, string> opts, List<string> pos) Parse(string[] args)
     {
@@ -131,7 +127,9 @@ public static class CliApp
 
     private static object Create(IConsoleIO io, WalletNetwork net, Dictionary<string, string> opts)
     {
-        var words = opts.TryGetValue("--words", out var w) ? int.Parse(w, System.Globalization.CultureInfo.InvariantCulture) : 24;
+        var words = 24;
+        if (opts.TryGetValue("--words", out var w) && (!int.TryParse(w, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out words) || words is not (12 or 24)))
+            throw new UsageException("--words must be 12 or 24.");
         if (WalletService.Exists(net)) throw new WalletExistsException(KaspaMyPaths.WalletPath(net));
         var info = new WalletService(KdfOverride).Create(net, Password(io, confirm: true), words);
         return new CreateResult(info, "Wallet created. The recovery phrase is stored ONLY inside the encrypted keystore. Back it up now with: kaspamy export-mnemonic --network " + info.Network);
@@ -150,9 +148,9 @@ public static class CliApp
 
     public sealed record BalanceResult(string Network, string Address, string Node, ulong BalanceSompi, string BalanceKas, int UtxoCount, bool NodeSynced, ulong VirtualDaaScore);
 
-    private static async Task<object> Balance(WalletNetwork net, string? node, CancellationToken ct)
+    private static async Task<object> Balance(IConsoleIO io, WalletNetwork net, string? node, CancellationToken ct)
     {
-        var w = WalletService.Status(net);
+        var w = WalletService.Info(net, Password(io, confirm: false)); // F2: verified address only
         var (n, url, st) = await NodeEndpoints.ConnectAsync(net, node, ct: ct);
         await using var _ = n;
         var coins = await n.GetCoinsAsync(w.Address, ct);
@@ -171,7 +169,7 @@ public static class CliApp
 
     private static async Task<object> Send(IConsoleIO io, WalletNetwork net, bool netGiven, string? node, Dictionary<string, string> opts, List<string> pos, bool json, CancellationToken ct)
     {
-        var to = Arg(pos, 0, "to-address");
+        var to = AddressValidator.Normalize(Arg(pos, 0, "to-address"));
         var amount = Kas.ParseKas(Arg(pos, 1, "amount-kas"));
         if (net == WalletNetwork.Mainnet && !netGiven) throw new UsageException("Mainnet sends require an explicit --network mainnet.");
         var v = AddressValidator.Validate(to, net);
@@ -201,8 +199,9 @@ public static class CliApp
                "Make sure nobody is watching and that this terminal is not being recorded or logged.");
         var answer = io.ReadLine($"Type '{ExportConfirmPhrase}' to show the recovery phrase: ");
         if (!string.Equals(answer?.Trim(), ExportConfirmPhrase, StringComparison.Ordinal)) return new Cancelled("Cancelled; the recovery phrase was not shown.");
-        var pw = io.GetEnv(WalletService.PasswordEnv);
-        if (string.IsNullOrEmpty(pw)) pw = io.ReadSecret("Wallet password: ") ?? "";
+        // F9: always typed interactively; KASPAMY_PASSWORD is deliberately ignored here.
+        var pw = io.ReadSecret("Wallet password (typed; KASPAMY_PASSWORD is ignored for export): ") ?? "";
+        if (string.IsNullOrEmpty(pw)) throw new UserException("No password entered; the recovery phrase was not shown.");
         var secret = WalletService.ExportMnemonic(net, pw);
         // The single intentional exception to the "never output the mnemonic" rule.
         return new ExportResult(net.Id(), secret.Reveal(), "Write these words down offline. Never paste them into chats, AI tools or websites.");
@@ -218,23 +217,28 @@ public static class CliApp
         Commands:
           create                      Create a wallet (BIP39, m/44'/111111'/0'/0/0). Does not print the phrase.
           import                      Import a recovery phrase (hidden prompt or KASPAMY_MNEMONIC).
-          address                     Show the receive address.
-          balance                     Query balance and UTXO count from a node.
+          address                     Show the receive address (decrypts the wallet to verify it; needs the password).
+          status                      Show wallet file info without a password (address NOT verified).
+          balance                     Query balance and UTXO count from a node (needs the password).
           fee                         Show node feerates and a typical transfer fee.
           validate <address>          Validate a Kaspa address.
           send <to> <amount-kas>      Build, sign, confirm and broadcast a transfer.
-          export-mnemonic             Show the recovery phrase (interactive, typed confirmation).
+          export-mnemonic             Show the recovery phrase (interactive only: type I UNDERSTAND, then the
+                                      password; KASPAMY_PASSWORD is ignored).
 
         Options:
           --network testnet-10|mainnet  Default testnet-10. Mainnet sends require it explicitly.
           --node ws(s)://...            JSON wRPC endpoint (or KASPAMY_NODE).
           --json                        Machine-readable output.
-          --yes                         Skip the send confirmation prompt.
+          --yes, -y                     Skip the send confirmation prompt.
           --words 12|24                 Mnemonic length for create (default 24).
           --verbose                     Info logs on stderr.
 
         Environment:
-          KASPAMY_PASSWORD   Wallet password (less secure than the prompt).
-          KASPAMY_HOME       Wallet directory (default %APPDATA%/KaspaMy).
+          KASPAMY_PASSWORD   Wallet password (less secure than the prompt; not used by export-mnemonic).
+          KASPAMY_MNEMONIC   Recovery phrase for import (else hidden prompt).
+          KASPAMY_NODE       Default node URL.
+          KASPAMY_HOME       Wallet directory. Default: the per-user application-data folder + /KaspaMy
+                             (Windows %APPDATA%\KaspaMy, Linux/macOS ~/.config/KaspaMy).
         """;
 }

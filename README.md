@@ -14,7 +14,7 @@ Kaspa primitives (BIP39, BIP32, addresses, signing, wRPC JSON client) come from 
 - **No promises of profit or value.** KaspaMy is a tool, not financial advice.
 - Your recovery phrase is the wallet. KaspaMy never prints it except via `kaspamy export-mnemonic`, which needs an interactive terminal and a typed `I UNDERSTAND`. Write it down offline.
 - `KASPAMY_PASSWORD` in the environment is convenient but **less secure** than the prompt (other processes/users and shell history may see it). The MCP server can *only* read the password from this variable — never from a tool argument — so the AI never sees it.
-- Giving an AI agent a funded wallet is risky. The MCP server defaults to testnet, refuses mainnet unless `KASPAMY_MCP_ALLOW_MAINNET=1`, and caps each send (10 KAS testnet / 1 KAS mainnet by default).
+- Giving an AI agent a funded wallet is risky. The MCP server defaults to testnet, refuses mainnet unless `KASPAMY_MCP_ALLOW_MAINNET=1`, caps each send including the fee (10 KAS testnet / 1 KAS mainnet by default) and the total per day (50 / 2 KAS), only talks to allowlisted nodes, and disables `wallet_import` unless `KASPAMY_MCP_ALLOW_IMPORT=1`. `confirm=true` is set by the agent, so it is **not** human approval; your MCP client must ask you.
 
 ## Build
 
@@ -33,10 +33,10 @@ Requires the .NET 8 SDK.
 | What | Default |
 |---|---|
 | Wallet file | `%APPDATA%\KaspaMy\wallet.<network>.json` (Windows), `~/.config/KaspaMy/...` (Linux/macOS; `Environment.SpecialFolder.ApplicationData`) |
-| `KASPAMY_HOME` | Override the wallet directory |
+| `KASPAMY_HOME` | Override the wallet directory. Next to each wallet: `wallet.<network>.json.lock` (lock file, safe to leave) and, for MCP, `mcp-spend.json` (daily spend ledger). |
 | Network | `testnet-10` (use `--network mainnet` explicitly for mainnet) |
 | Node | mainnet `wss://eva.kaspa.green/kaspa/mainnet/wrpc/json`; testnet-10 `wss://vector-10.kaspa.green/kaspa/testnet-10/wrpc/json` then `wss://muon-10.kaspa.blue/...`, then the public PNN resolver. Override with `--node` or `KASPAMY_NODE` (JSON wRPC, `ws://` / `wss://`). |
-| `KASPAMY_PASSWORD` | Keystore password (else prompted) |
+| `KASPAMY_PASSWORD` | Keystore password (else prompted). Ignored by `export-mnemonic`, which always asks you to type it. |
 | `KASPAMY_MNEMONIC` | Phrase for `import` (else hidden prompt) |
 
 Keystore: AES-256-GCM, key from Argon2id (64 MiB, 3 iterations, 4 lanes), network bound as associated data. Format compatible with KasNetWallet. Existing wallets are never overwritten.
@@ -45,9 +45,10 @@ Keystore: AES-256-GCM, key from Argon2id (64 MiB, 3 iterations, 4 lanes), networ
 
 ```bash
 kaspamy create                    # testnet-10, 24 words; phrase is NOT shown
-kaspamy export-mnemonic           # interactive, type I UNDERSTAND
+kaspamy export-mnemonic           # interactive: type I UNDERSTAND, then type the password (env var ignored)
 kaspamy import                    # phrase via hidden prompt or KASPAMY_MNEMONIC
-kaspamy address --json
+kaspamy address --json            # needs the password: the address is decrypted and verified
+kaspamy status --json             # file header only, address NOT verified
 kaspamy balance --json
 kaspamy fee --json                # node feerates + estimate for a typical transfer
 kaspamy validate kaspatest:qq... --json
@@ -55,6 +56,8 @@ kaspamy send kaspatest:qq... 1.5           # summary, then type "yes"
 kaspamy send kaspa:qq... 0.1 --network mainnet   # type "SEND MAINNET"; mainnet always needs --network mainnet
 kaspamy send kaspatest:qq... 1.5 --yes --json    # non-interactive (scripts)
 ```
+
+Concurrent `create`/`import` are safe: a lock file serializes them and the wallet file is published atomically without overwrite, so exactly one succeeds and the others get "already exists". Uppercase bech32 addresses (`KASPA:QQ...`) are accepted; mixed case is rejected. A modified wallet file is reported as "modified or damaged", distinct from "Wrong password." (files from older builds without a checksum give a combined message).
 
 JSON envelope: `{"ok":true,"command":"address","data":{...}}` or `{"ok":false,"command":"...","error":"..."}`. Exit codes: 0 ok, 1 error, 2 cancelled, 64 usage.
 
@@ -64,9 +67,12 @@ Tools: `wallet_create` (never returns the phrase; tells you to run `kaspamy expo
 
 | Env | Meaning |
 |---|---|
-| `KASPAMY_PASSWORD` | Required for create/import/send. Only source of the password. |
+| `KASPAMY_PASSWORD` | Required for create/import/send, and to show a (verified) address or balance. Only source of the password. |
 | `KASPAMY_MCP_ALLOW_MAINNET=1` | Enable mainnet (off by default). |
-| `KASPAMY_MCP_MAX_KAS_TESTNET` / `KASPAMY_MCP_MAX_KAS_MAINNET` | Per-transaction cap (default 10 / 1 KAS). |
+| `KASPAMY_MCP_MAX_KAS_TESTNET` / `KASPAMY_MCP_MAX_KAS_MAINNET` | Per-transaction cap on amount **+ fee** (default 10 / 1 KAS). |
+| `KASPAMY_MCP_DAILY_MAX_KAS_TESTNET` / `KASPAMY_MCP_DAILY_MAX_KAS_MAINNET` | Cumulative amount + fee per local calendar day, persisted in `mcp-spend.json` across restarts (default 50 / 2 KAS). An unreadable ledger blocks sends. |
+| `KASPAMY_MCP_ALLOW_IMPORT=1` | Enable `wallet_import` (off by default: a phrase typed into an AI chat is exposed to the model, its provider and logs; use `kaspamy import` instead). |
+| `KASPAMY_MCP_NODES` | Comma-separated extra node URLs the agent may pass as `node`. Allowed otherwise: the built-in public nodes and `KASPAMY_NODE`. Anything else is rejected. |
 | `KASPAMY_VERBOSE=1` | Info logs on stderr. |
 
 Claude Desktop (`claude_desktop_config.json`) or Cursor (`~/.cursor/mcp.json`):

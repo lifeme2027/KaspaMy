@@ -8,17 +8,17 @@ namespace KaspaMy.Mcp;
 public static class McpTools
 {
     private const string NetDesc = "Network: testnet-10 (default) or mainnet (mainnet needs KASPAMY_MCP_ALLOW_MAINNET=1 on the server).";
-    private const string NodeDesc = "Optional JSON wRPC URL (ws:// or wss://). Default: public node for the network.";
+    private const string NodeDesc = "Optional node URL; must be on the server allowlist (built-in public nodes, KASPAMY_NODE, KASPAMY_MCP_NODES). Omit to use the default.";
 
     [McpServerTool(Name = "wallet_create"), Description("Create a new encrypted wallet. The recovery phrase is NEVER returned; back it up with `kaspamy export-mnemonic` in a terminal. Password comes from KASPAMY_PASSWORD.")]
     public static Task<string> WalletCreate([Description(NetDesc)] string? network = null, [Description("Mnemonic length: 12 or 24 (default 24).")] int words = 24)
         => WalletTools.WalletCreate(network, words);
 
-    [McpServerTool(Name = "wallet_import"), Description("Import a BIP39 recovery phrase into an encrypted wallet (m/44'/111111'/0'/0/0). The phrase is never echoed back. Password comes from KASPAMY_PASSWORD.")]
+    [McpServerTool(Name = "wallet_import"), Description("DISABLED unless the server sets KASPAMY_MCP_ALLOW_IMPORT=1. Imports a BIP39 recovery phrase. WARNING: the phrase passes through the AI model and chat logs; prefer `kaspamy import` in a terminal. Never echoed back. Password from KASPAMY_PASSWORD.")]
     public static Task<string> WalletImport([Description("BIP39 recovery phrase (12-24 words).")] string mnemonic, [Description(NetDesc)] string? network = null)
         => WalletTools.WalletImport(mnemonic, network);
 
-    [McpServerTool(Name = "wallet_status", ReadOnly = true), Description("Whether a wallet exists, its address, keystore path and the server's safety limits.")]
+    [McpServerTool(Name = "wallet_status", ReadOnly = true), Description("Whether a wallet exists, its verified address (needs KASPAMY_PASSWORD), keystore path and the server's safety limits and today's spend.")]
     public static Task<string> WalletStatus([Description(NetDesc)] string? network = null) => WalletTools.WalletStatus(network);
 
     [McpServerTool(Name = "get_address", ReadOnly = true), Description("Receive address of the wallet.")]
@@ -33,7 +33,7 @@ public static class McpTools
         [Description("Optional amount in KAS, e.g. \"1.5\".")] string? amount_kas = null, [Description(NodeDesc)] string? node = null)
         => WalletTools.EstimateFee(network, to, amount_kas, node);
 
-    [McpServerTool(Name = "send_kas", Destructive = true), Description("Send KAS. Testnet-10 by default; mainnet disabled unless KASPAMY_MCP_ALLOW_MAINNET=1. Per-transaction cap (default 10 KAS testnet / 1 KAS mainnet). Requires confirm=true after explicit user approval. Password from KASPAMY_PASSWORD only.")]
+    [McpServerTool(Name = "send_kas", Destructive = true), Description("Send KAS. Testnet-10 by default; mainnet disabled unless KASPAMY_MCP_ALLOW_MAINNET=1. Caps on amount+fee: per transaction (default 10 KAS testnet / 1 KAS mainnet) and per day (default 50 / 2 KAS). confirm=true is set by the agent, so it is NOT human approval: the client must ask the user. Password from KASPAMY_PASSWORD only.")]
     public static Task<string> SendKas([Description("Recipient address.")] string to, [Description("Amount in KAS, e.g. \"1.5\".")] string amount_kas,
         [Description("Must be true; set only after the user approved recipient, amount and network.")] bool confirm = false,
         [Description(NetDesc)] string? network = null, [Description(NodeDesc)] string? node = null)

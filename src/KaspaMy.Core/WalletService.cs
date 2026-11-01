@@ -5,7 +5,9 @@ using KaspaMy.Core.Keystore;
 namespace KaspaMy.Core;
 
 /// <summary>Public, secret-free wallet description. Safe to print, return from MCP tools, or log.</summary>
-public sealed record WalletInfo(string Network, string Address, string DerivationPath, string KeystorePath, DateTimeOffset CreatedUtc);
+/// <param name="AddressVerified">True when the address was re-derived from the decrypted keystore (F2). False means it was read
+/// from the file's plaintext header without a password and must not be used as a receive address.</param>
+public sealed record WalletInfo(string Network, string Address, string DerivationPath, string KeystorePath, DateTimeOffset CreatedUtc, bool AddressVerified = false);
 
 public sealed class WalletExistsException : InvalidOperationException
 {
@@ -46,11 +48,14 @@ public sealed class WalletService
     {
         ValidatePassword(password);
         var path = KaspaMyPaths.WalletPath(n);
+        // F1: lock + check + atomic no-overwrite create. The address returned is the one derived for the file we wrote.
+        using var _ = WalletLock.Acquire(path);
         if (File.Exists(path)) throw new WalletExistsException(path);
         var file = WalletKeystore.Encrypt(mnemonic, password, n, _kdf);
-        WalletKeystore.Save(file, path);
+        try { WalletKeystore.SaveNew(file, path); }
+        catch (IOException) when (File.Exists(path)) { throw new WalletExistsException(path); }
         WalletLog.Info($"wallet stored: network={n.Id()} address={file.Address}");
-        return ToInfo(file, path);
+        return ToInfo(file, path, verified: true);
     }
 
     public static void ValidatePassword(string password)
@@ -59,12 +64,25 @@ public sealed class WalletService
             throw new ArgumentException($"Password must be at least {MinPasswordLength} characters.");
     }
 
-    /// <summary>Public info from the file, no password needed (address is stored in clear and bound into the AEAD data).</summary>
+    /// <summary>
+    /// Header info WITHOUT a password. The address is NOT verified (F2): anyone with write access could have replaced it.
+    /// Use <see cref="Info"/> before showing an address to receive funds.
+    /// </summary>
     public static WalletInfo Status(WalletNetwork n)
     {
         var path = KaspaMyPaths.WalletPath(n);
         if (!File.Exists(path)) throw new WalletNotFoundException(n);
         return ToInfo(WalletKeystore.Load(path), path);
+    }
+
+    /// <summary>F2: decrypts, re-derives the address and checks it against the file. The only way to get a trusted address.</summary>
+    public static WalletInfo Info(WalletNetwork n, string password)
+    {
+        var path = KaspaMyPaths.WalletPath(n);
+        if (!File.Exists(path)) throw new WalletNotFoundException(n);
+        var f = WalletKeystore.Load(path);
+        using var acc = WalletKeystore.Unlock(f, password);
+        return ToInfo(f, path, verified: true) with { Address = acc.Address };
     }
 
     /// <summary>Decrypts and derives the signing key. Dispose the result promptly.</summary>
@@ -83,6 +101,6 @@ public sealed class WalletService
         return new SecretText(WalletKeystore.Decrypt(WalletKeystore.Load(path), password));
     }
 
-    private static WalletInfo ToInfo(KeystoreFile f, string path) =>
-        new(Enum.Parse<WalletNetwork>(f.Network).Id(), f.Address, HdAccount.ReceivePath, path, f.CreatedUtc);
+    private static WalletInfo ToInfo(KeystoreFile f, string path, bool verified = false) =>
+        new(Enum.Parse<WalletNetwork>(f.Network).Id(), f.Address, HdAccount.ReceivePath, path, f.CreatedUtc, verified);
 }

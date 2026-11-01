@@ -8,7 +8,8 @@ using Microsoft.Extensions.Logging;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
-builder.Logging.SetMinimumLevel(LogLevel.Warning);
+// F7: the SDK logs full stack traces for failed invocations; keep only critical host errors (still stderr).
+builder.Logging.SetMinimumLevel(LogLevel.Critical);
 WalletLog.Verbose = Environment.GetEnvironmentVariable("KASPAMY_VERBOSE") == "1";
 builder.Services.AddMcpServer(o => o.ServerInfo = new() { Name = "kaspamy", Version = "0.1.0" })
     .WithStdioServerTransport()

@@ -105,7 +105,7 @@ public class CliTests
         Assert.Equal(2, code);
         Assert.DoesNotContain("abandon", io.All);
 
-        io = Io(interactive: true); io.Lines.Enqueue(CliApp.ExportConfirmPhrase);
+        io = Io(interactive: true); io.Lines.Enqueue(CliApp.ExportConfirmPhrase); io.Secrets.Enqueue(Vectors.Password);
         (code, _, _) = await Run(io, "export-mnemonic");
         Assert.Equal(0, code);
         Assert.Contains(Vectors.Abandon, io.AllOut);

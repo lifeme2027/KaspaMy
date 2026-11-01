@@ -23,7 +23,7 @@ public sealed class TempHome : IDisposable
     {
         Directory.CreateDirectory(Dir);
         Set("KASPAMY_HOME", Dir);
-        foreach (var k in new[] { "KASPAMY_PASSWORD", "KASPAMY_MNEMONIC", "KASPAMY_NODE", "KASPAMY_MCP_ALLOW_MAINNET", "KASPAMY_MCP_MAX_KAS_TESTNET", "KASPAMY_MCP_MAX_KAS_MAINNET" }) Set(k, null);
+        foreach (var k in new[] { "KASPAMY_PASSWORD", "KASPAMY_MNEMONIC", "KASPAMY_NODE", "KASPAMY_MCP_ALLOW_MAINNET", "KASPAMY_MCP_MAX_KAS_TESTNET", "KASPAMY_MCP_MAX_KAS_MAINNET", "KASPAMY_MCP_ALLOW_IMPORT", "KASPAMY_MCP_NODES", "KASPAMY_MCP_DAILY_MAX_KAS_TESTNET", "KASPAMY_MCP_DAILY_MAX_KAS_MAINNET" }) Set(k, null);
         CliApp.KdfOverride = KdfParameters.TestOnly;
         KaspaMy.Mcp.WalletTools.KdfOverride = KdfParameters.TestOnly;
     }

@@ -13,3 +13,17 @@
 11. **Logging.** Core logs through `WalletLog` → stderr only (redacted). The MCP host's own logging is also routed to stderr, so stdout carries JSON-RPC only.
 12. **CLI parser.** Hand-rolled to avoid a pre-release System.CommandLine dependency; output is a stable JSON envelope.
 13. **Errors as data in MCP.** Tool failures return `{"ok":false,"error":...}` text content rather than protocol errors, so assistants can show the reason.
+
+## Acceptance round 2 (findings F1–F11 on d4f89d6)
+
+14. **F1 concurrency.** Wallet creation takes an exclusive lock on `wallet.<net>.json.lock` (FileShare.None / flock), re-checks existence, writes a unique `*.{pid}.{guid}.tmp` (O_EXCL, 0600) and publishes it with `link(2)` (atomic, fails on EEXIST; `File.Move(overwrite:false)` was measured racy on Linux) or MoveFileEx on Windows. MCP mutating tools (create/import/send) are also serialized by an in-process semaphore. The lock file is never deleted (deleting it would reintroduce a race).
+15. **F2 address verification.** `address`, `balance`, `get_address`, `get_balance` decrypt the keystore and require the derived address to equal the stored one; the address is also bound into the AES-GCM AAD. `status`/`wallet_status` without a password do not show an address (`addressVerified=false`).
+16. **F3 daily limit.** Persistent per-network ledger keyed by local date; reserve before broadcast, release only on a definite broadcast failure (status-unknown keeps the reservation); fail closed if unreadable.
+17. **F4 node allowlist.** The agent may only name built-in nodes, `KASPAMY_NODE` or `KASPAMY_MCP_NODES` entries (blocks SSRF / malicious-node steering).
+18. **F5 import.** Chosen option: `wallet_import` disabled unless `KASPAMY_MCP_ALLOW_IMPORT=1` (rather than import-from-file), because a file path tool would let an agent read arbitrary files and the safe path is the CLI anyway.
+19. **F6 cap.** The per-transaction cap is checked on amount before building, and on amount + fee after building.
+20. **F7 errors.** `ErrorText.Safe` passes messages only from our own exception types and a few well-understood BCL types; everything else becomes `Unexpected error (Type).`. No inner messages or stack traces; the MCP host logs at Critical only.
+21. **F8 tamper vs password.** The keystore carries an unkeyed SHA-256 checksum over all fields. A mismatch means the file changed ("modified or damaged"); a matching checksum plus a GCM failure means wrong password. This is integrity-against-accident, not authentication (GCM remains the authenticator). Old files without a checksum still open and get a combined message.
+22. **F9 export.** Always prompts for the password; `KASPAMY_PASSWORD` is ignored.
+23. **F10 addresses.** All-uppercase bech32 is normalized to lowercase per BIP173; mixed case is rejected.
+

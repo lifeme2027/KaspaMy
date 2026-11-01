@@ -18,4 +18,7 @@ public sealed class KeystoreFile
     public string Network { get; set; } = "";
     public string Address { get; set; } = "";
     public DateTimeOffset CreatedUtc { get; set; }
+    /// <summary>F8: unkeyed SHA-256 over every other field. Lets us tell "file modified/damaged" apart from "wrong password".
+    /// Not a security control (anyone can recompute it); the AEAD tag remains the authority. Absent in older files.</summary>
+    public string? Checksum { get; set; }
 }

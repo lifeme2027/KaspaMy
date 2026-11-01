@@ -91,7 +91,7 @@ public static class NodeEndpoints
             catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
                 if (node is not null) await node.DisposeAsync().ConfigureAwait(false);
-                errors.Add($"{url}: {SecretRedactor.Redact(ex.Message)}");
+                errors.Add($"{url}: {(ex is NodeUnavailableException ? ex.Message : ex.GetType().Name)}"); // F7: no inner messages
             }
         }
         if (string.IsNullOrWhiteSpace(overrideUrl ?? Environment.GetEnvironmentVariable(NodeEnv)))

@@ -36,6 +36,7 @@ public class McpToolTests
     {
         using var h = new TempHome();
         h.Set("KASPAMY_PASSWORD", Vectors.Password);
+        h.Set(WalletTools.AllowImportEnv, "1");
         var lines = new List<string>();
         KaspaMy.Core.WalletLog.Sink = lines.Add;
         try
@@ -74,13 +75,12 @@ public class McpToolTests
     {
         using var h = new TempHome();
         h.Set("KASPAMY_PASSWORD", Vectors.Password);
-        await WalletTools.WalletImport(Vectors.Abandon, null);
         Assert.Contains("confirm=true", await WalletTools.SendKas(Vectors.Testnet, "1", null, false, "ws://127.0.0.1:1"));
         Assert.Contains("per-transaction limit", await WalletTools.SendKas(Vectors.Testnet, "10.00000001", null, true, "ws://127.0.0.1:1"));
         h.Set(WalletTools.MaxTestnetEnv, "0.5");
         Assert.Contains("per-transaction limit", await WalletTools.SendKas(Vectors.Testnet, "1", null, true, "ws://127.0.0.1:1"));
         Assert.Equal(100_000_000UL, WalletTools.MaxSompi(KaspaMy.Core.WalletNetwork.Mainnet));
-        Assert.Contains("mainn", await WalletTools.SendKas(Vectors.Mainnet, "0.1", null, true, "ws://127.0.0.1:1"));
+        Assert.Contains("mainn", await WalletTools.SendKas(Vectors.Mainnet, "0.1", null, true, null));
     }
 
     [Fact]
@@ -103,6 +103,7 @@ public class McpProcessTests
         psi.Environment["KASPAMY_HOME"] = home;
         psi.Environment["KASPAMY_PASSWORD"] = Vectors.Password;
         psi.Environment["KASPAMY_VERBOSE"] = "1";
+        psi.Environment["KASPAMY_MCP_ALLOW_IMPORT"] = "1";
         psi.Environment.Remove("KASPAMY_MCP_ALLOW_MAINNET");
         using var p = Process.Start(psi)!;
         var stderr = new StringBuilder();
