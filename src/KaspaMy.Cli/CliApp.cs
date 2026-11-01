@@ -28,7 +28,12 @@ public static class CliApp
 
     public static async Task<int> RunAsync(string[] args, IConsoleIO io, CancellationToken ct = default)
     {
-        var (cmd, opts, pos) = Parse(args);
+        var (cmd, opts, pos, parseError) = Parse(args);
+        if (parseError is not null) // N1: malformed command line -> clean usage error, never an unhandled exception
+        {
+            Emit(io, args.Contains("--json"), cmd, false, null, parseError);
+            return 64;
+        }
         var json = opts.ContainsKey("--json");
         WalletLog.Verbose = opts.ContainsKey("--verbose");
         if (cmd is null || cmd is "help" || opts.ContainsKey("--help") || opts.ContainsKey("-h")) { io.Out(Usage); return cmd is null ? 1 : 0; }
@@ -42,7 +47,7 @@ public static class CliApp
                 "create" => Create(io, net, opts),
                 "import" => Import(io, net),
                 "address" => WalletService.Info(net, Password(io, confirm: false)), // F2: decrypt + verify
-                "status" => WalletService.Status(net),                               // header only, addressVerified=false
+                "status" => StatusView.From(WalletService.Status(net)),              // header only, NOT verified (N5 warning)
                 "balance" => await Balance(io, net, node, ct),
                 "fee" or "estimate-fee" => await Fee(net, node, ct),
                 "validate" or "validate-address" => AddressValidator.Validate(Arg(pos, 0, "address"), netGiven ? net : null),
@@ -65,7 +70,16 @@ public static class CliApp
     private sealed record Cancelled(string Reason);
     private sealed class UsageException : UserException { public UsageException(string m) : base(m) { } }
 
-    private static (string? cmd, Dictionary<string, string> opts, List<string> pos) Parse(string[] args)
+    public const string UnverifiedWarning = "UNVERIFIED ADDRESS: read from the wallet file without decrypting it. Anyone who can write the file could have replaced it. " +
+        "Do NOT give it out to receive funds; run 'kaspamy address' (needs the password) to get the verified address.";
+
+    /// <summary>N5: status output that cannot be mistaken for a receive address.</summary>
+    private sealed record StatusView(string Network, bool AddressVerified, string Warning, string UnverifiedAddress, string DerivationPath, string KeystorePath, DateTimeOffset CreatedUtc)
+    {
+        public static StatusView From(WalletInfo w) => new(w.Network, false, UnverifiedWarning, w.Address, w.DerivationPath, w.KeystorePath, w.CreatedUtc);
+    }
+
+    private static (string? cmd, Dictionary<string, string> opts, List<string> pos, string? error) Parse(string[] args)
     {
         var opts = new Dictionary<string, string>(StringComparer.Ordinal);
         var pos = new List<string>();
@@ -78,13 +92,14 @@ public static class CliApp
                 var eq = a.IndexOf('=');
                 if (eq > 0) { opts[a[..eq]] = a[(eq + 1)..]; continue; }
                 if (Flags.Contains(a)) { opts[a] = "true"; continue; }
-                if (i + 1 >= args.Length) throw new ArgumentException($"Option {a} needs a value.");
+                if (i + 1 >= args.Length || (args[i + 1].StartsWith("--", StringComparison.Ordinal) && args[i + 1].Length > 2))
+                    return (cmd, opts, pos, $"Option {a} needs a value. Run 'kaspamy help'.");
                 opts[a] = args[++i];
             }
             else if (cmd is null) cmd = a;
             else pos.Add(a);
         }
-        return (cmd, opts, pos);
+        return (cmd, opts, pos, null);
     }
 
     private static string Arg(List<string> pos, int i, string name) =>
@@ -100,6 +115,12 @@ public static class CliApp
             return;
         }
         if (!ok) { io.Err("Error: " + error); return; }
+        if (data is StatusView sv)
+        {
+            io.Err("!!! " + sv.Warning + " !!!");
+            io.Out($"Network:  {sv.Network}\nAddress:  {sv.UnverifiedAddress}   <-- UNVERIFIED, do not use to receive funds\nPath:     {sv.DerivationPath}\nKeystore: {sv.KeystorePath}");
+            return;
+        }
         switch (data)
         {
             case string s: io.Out(s); break;

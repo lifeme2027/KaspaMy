@@ -48,7 +48,7 @@ kaspamy create                    # testnet-10, 24 words; phrase is NOT shown
 kaspamy export-mnemonic           # interactive: type I UNDERSTAND, then type the password (env var ignored)
 kaspamy import                    # phrase via hidden prompt or KASPAMY_MNEMONIC
 kaspamy address --json            # needs the password: the address is decrypted and verified
-kaspamy status --json             # file header only, address NOT verified
+kaspamy status --json             # file header only: shows `unverifiedAddress` + a warning; never use it to receive funds
 kaspamy balance --json
 kaspamy fee --json                # node feerates + estimate for a typical transfer
 kaspamy validate kaspatest:qq... --json
@@ -70,7 +70,7 @@ Tools: `wallet_create` (never returns the phrase; tells you to run `kaspamy expo
 | `KASPAMY_PASSWORD` | Required for create/import/send, and to show a (verified) address or balance. Only source of the password. |
 | `KASPAMY_MCP_ALLOW_MAINNET=1` | Enable mainnet (off by default). |
 | `KASPAMY_MCP_MAX_KAS_TESTNET` / `KASPAMY_MCP_MAX_KAS_MAINNET` | Per-transaction cap on amount **+ fee** (default 10 / 1 KAS). |
-| `KASPAMY_MCP_DAILY_MAX_KAS_TESTNET` / `KASPAMY_MCP_DAILY_MAX_KAS_MAINNET` | Cumulative amount + fee per local calendar day, persisted in `mcp-spend.json` across restarts (default 50 / 2 KAS). An unreadable ledger blocks sends. |
+| `KASPAMY_MCP_DAILY_MAX_KAS_TESTNET` / `KASPAMY_MCP_DAILY_MAX_KAS_MAINNET` | Cumulative amount + fee per **UTC** calendar day, persisted in `mcp-spend.json` (0600) across restarts (default 50 / 2 KAS). A missing (after first use), empty, `null`, unreadable or future-dated ledger blocks all MCP sends until you delete `mcp-spend.json` and `mcp-spend.anchor` by hand. Limit values must be plain positive decimals; invalid values fall back to the default and values above 1,000,000 KAS are clamped. |
 | `KASPAMY_MCP_ALLOW_IMPORT=1` | Enable `wallet_import` (off by default: a phrase typed into an AI chat is exposed to the model, its provider and logs; use `kaspamy import` instead). |
 | `KASPAMY_MCP_NODES` | Comma-separated extra node URLs the agent may pass as `node`. Allowed otherwise: the built-in public nodes and `KASPAMY_NODE`. Anything else is rejected. |
 | `KASPAMY_VERBOSE=1` | Info logs on stderr. |

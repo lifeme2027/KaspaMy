@@ -50,12 +50,26 @@ public sealed class WalletService
         var path = KaspaMyPaths.WalletPath(n);
         // F1: lock + check + atomic no-overwrite create. The address returned is the one derived for the file we wrote.
         using var _ = WalletLock.Acquire(path);
+        CleanStaleTemps(path);
         if (File.Exists(path)) throw new WalletExistsException(path);
         var file = WalletKeystore.Encrypt(mnemonic, password, n, _kdf);
         try { WalletKeystore.SaveNew(file, path); }
         catch (IOException) when (File.Exists(path)) { throw new WalletExistsException(path); }
         WalletLog.Info($"wallet stored: network={n.Id()} address={file.Address}");
         return ToInfo(file, path, verified: true);
+    }
+
+    /// <summary>N6: removes leftover temp files from crashed writers (older than 10 min). Called under the wallet lock.</summary>
+    internal static void CleanStaleTemps(string path)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(Path.GetFullPath(path))!;
+            if (!Directory.Exists(dir)) return;
+            foreach (var f in Directory.EnumerateFiles(dir, Path.GetFileName(path) + ".*.tmp"))
+                if (DateTime.UtcNow - File.GetLastWriteTimeUtc(f) > TimeSpan.FromMinutes(10)) File.Delete(f);
+        }
+        catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
 
     public static void ValidatePassword(string password)

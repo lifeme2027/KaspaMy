@@ -193,7 +193,11 @@ public static class WalletKeystore
     {
         if (OperatingSystem.IsWindows()) { File.WriteAllText(path, contents); return; }
         var opts = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite };
-        using (var fs = new FileStream(path, opts)) using (var w = new StreamWriter(fs)) w.Write(contents);
+        using (var fs = new FileStream(path, opts))
+        {
+            using (var w = new StreamWriter(fs, leaveOpen: true)) w.Write(contents);
+            fs.Flush(flushToDisk: true); // N6: durable before link(2) publishes it
+        }
         File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 

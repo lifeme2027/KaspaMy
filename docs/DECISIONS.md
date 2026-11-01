@@ -27,3 +27,12 @@
 22. **F9 export.** Always prompts for the password; `KASPAMY_PASSWORD` is ignored.
 23. **F10 addresses.** All-uppercase bech32 is normalized to lowercase per BIP173; mixed case is rejected.
 
+## Retest of 3447f53 (findings N1–N6)
+
+24. **N2 spend ledger integrity.** The day key is the UTC date (independent of the server's TZ); the ledger and its anchor are written 0600 with fsync + atomic replace. A missing ledger is ambiguous (first use vs deletion), so on the first write we also create `mcp-spend.anchor`, which KaspaMy never deletes. Rules: no ledger and no anchor = first use, start at zero; anchor without ledger, `null`/`{}`/missing fields, invalid date or a date in the future = refuse every send (fail-closed) until the operator removes both files by hand; a past date = new UTC day, the only automatic reset. Ledgers from 3447f53 (local date, no Version) that are one day ahead of UTC keep their spend. Residual risk: someone who can delete both files in KASPAMY_HOME can reset the limit; that person can also replace the keystore and typically reads the env password, so an HMAC keyed by the same password would add little. Not done.
+25. **N3 limit env vars.** Parsed as plain positive decimals (no exponent); invalid/zero/negative -> default with a stderr warning; values above 1,000,000 KAS are clamped; sub-sompi digits truncated. Ledger arithmetic is overflow-safe.
+26. **N1 CLI parsing.** Parse errors are returned (not thrown) and reported as a usage error (exit 64, JSON envelope with `--json`). An option followed by another `--option` is treated as missing its value.
+27. **N4 node allowlist matching.** `scheme://host[:port]` compares case-insensitively; path and query compare exactly. Ports must be written exactly as in the allowlist.
+28. **N5 unverified status.** `status` output names the field `unverifiedAddress`, adds a `warning`, and prints a `!!! UNVERIFIED ADDRESS ... !!!` banner on stderr in text mode. The checksum (F8) stays unkeyed by design: it only separates "file changed" from "wrong password"; authenticity comes from AES-GCM + address re-derivation (F2).
+29. **N6 temp files and lock wait.** Temp files are fsynced before being linked into place. Leftover `wallet.<net>.json.*.tmp` files older than 10 minutes are deleted under the wallet lock on the next create/import (unrelated `*.tmp` files are left alone). The 30 s lock wait is kept on purpose: Argon2id with production parameters can take several seconds per concurrent create, and failing faster would make legitimate parallel callers fail; the error says "busy".
+

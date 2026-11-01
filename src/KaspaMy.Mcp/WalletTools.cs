@@ -41,11 +41,25 @@ public static class WalletTools
     public static bool MainnetAllowed => Environment.GetEnvironmentVariable(AllowMainnetEnv) == "1";
     public static bool ImportAllowed => Environment.GetEnvironmentVariable(AllowImportEnv) == "1";
 
-    private static ulong KasEnv(string env, decimal def)
+    /// <summary>N3: upper bound for any configured limit (well below ulong overflow; above the KAS max supply is meaningless).</summary>
+    public const decimal LimitCeilingKas = 1_000_000m;
+
+    /// <summary>N3: parses a KAS limit env var. Invalid, zero or negative -> default; above the ceiling -> clamped; sub-sompi digits truncated.
+    /// Never throws, so a bad value cannot turn into an overflow or an unexpected error.</summary>
+    internal static ulong KasEnv(string env, decimal def)
     {
         var v = Environment.GetEnvironmentVariable(env);
-        var kas = decimal.TryParse(v, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) && d > 0 ? d : def;
-        return (ulong)(kas * Kas.SompiPerKas);
+        decimal kas = def;
+        if (!string.IsNullOrWhiteSpace(v))
+        {
+            if (decimal.TryParse(v.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) && d > 0)
+            {
+                kas = d;
+                if (kas > LimitCeilingKas) { WalletLog.Warn($"{env}={v} is above the ceiling; using {LimitCeilingKas} KAS."); kas = LimitCeilingKas; }
+            }
+            else WalletLog.Warn($"{env} is not a positive decimal; using the default {def} KAS.");
+        }
+        return (ulong)decimal.Truncate(kas * Kas.SompiPerKas);
     }
 
     /// <summary>Per-transaction cap on amount + fee (F6).</summary>
@@ -72,10 +86,25 @@ public static class WalletTools
     {
         if (string.IsNullOrWhiteSpace(node)) return null; // server-side default (KASPAMY_NODE or built-ins)
         var t = node.Trim();
-        if (!AllowedNodes(n).Any(a => string.Equals(a, t, StringComparison.OrdinalIgnoreCase)))
+        if (!AllowedNodes(n).Any(a => NodeEquals(a, t)))
             throw new UserException($"Node '{t}' is not on the server's allowlist. Allowed: {string.Join(", ", AllowedNodes(n))}. " +
                 $"The operator can add nodes with {NodesEnv} (comma-separated) or set {NodeEndpoints.NodeEnv}.");
         return t;
+    }
+
+    /// <summary>N4: scheme and host compare case-insensitively (DNS semantics); port, path, query compare exactly.</summary>
+    internal static bool NodeEquals(string allowed, string candidate)
+    {
+        static (string head, string rest) Split(string u)
+        {
+            var s = u.IndexOf("://", StringComparison.Ordinal);
+            if (s < 0) return (u, "");
+            var p = u.IndexOf('/', s + 3);
+            return p < 0 ? (u, "") : (u[..p], u[p..]);
+        }
+        var (ah, ar) = Split(allowed); var (ch, cr) = Split(candidate);
+        // head = scheme://authority (no userinfo is ever in the allowlist, and '@' would not match) -> case-insensitive
+        return string.Equals(ah, ch, StringComparison.OrdinalIgnoreCase) && string.Equals(ar, cr, StringComparison.Ordinal);
     }
 
     private static string Ok(object data) => SecretRedactor.Redact(JsonSerializer.Serialize(new { ok = true, data }, Json));
@@ -170,9 +199,15 @@ public static class WalletTools
             importAllowed = ImportAllowed,
             maxSendKas = Kas.Format(MaxSompi(n)),
             dailyMaxKas = Kas.Format(DailyMaxSompi(n)),
-            sentTodayKas = Kas.Format(SpendLedger.SpentToday(n)),
+            sentTodayKas = SentTodayText(n),
         }));
     });
+
+    private static string SentTodayText(WalletNetwork n)
+    {
+        try { return Kas.Format(SpendLedger.SpentToday(n)); }
+        catch (UserException ex) { return "unknown (sends blocked): " + ex.Message; }
+    }
 
     public static Task<string> GetAddress(string? network) => Guard("get_address", () =>
     {
