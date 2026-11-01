@@ -73,7 +73,7 @@ public static class SpendLedger
         if (sompi > dailyMax || spent > dailyMax - sompi) // overflow-safe form of spent + sompi > dailyMax
             throw new UserException($"Daily MCP limit reached on {n.Id()}: already sent {Kas.Format(spent)} KAS today (UTC), this transfer needs {Kas.Format(sompi)} KAS " +
                 $"(amount + fee), limit {Kas.Format(dailyMax)} KAS. Configure with {(n == WalletNetwork.Mainnet ? WalletTools.DailyMainnetEnv : WalletTools.DailyTestnetEnv)}.");
-        d.Sompi[n.Id()] = spent + sompi;
+        d.Sompi![n.Id()] = spent + sompi;
         Write(d);
         return spent + sompi;
     }
@@ -84,7 +84,7 @@ public static class SpendLedger
         using var _ = WalletLock.Acquire(PathFor);
         var d = Read();
         var spent = d.Sompi!.GetValueOrDefault(n.Id());
-        d.Sompi[n.Id()] = spent > sompi ? spent - sompi : 0;
+        d.Sompi![n.Id()] = spent > sompi ? spent - sompi : 0;
         Write(d);
     }
 

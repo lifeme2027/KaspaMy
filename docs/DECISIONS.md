@@ -36,3 +36,7 @@
 28. **N5 unverified status.** `status` output names the field `unverifiedAddress`, adds a `warning`, and prints a `!!! UNVERIFIED ADDRESS ... !!!` banner on stderr in text mode. The checksum (F8) stays unkeyed by design: it only separates "file changed" from "wrong password"; authenticity comes from AES-GCM + address re-derivation (F2).
 29. **N6 temp files and lock wait.** Temp files are fsynced before being linked into place. Leftover `wallet.<net>.json.*.tmp` files older than 10 minutes are deleted under the wallet lock on the next create/import (unrelated `*.tmp` files are left alone). The 30 s lock wait is kept on purpose: Argon2id with production parameters can take several seconds per concurrent create, and failing faster would make legitimate parallel callers fail; the error says "busy".
 
+
+## Mainnet live test of 58be59d (2026-11-01, approved by jun chen)
+
+30. KasNetWallet v1 keystores are format-compatible (same fields, no checksum = legacy path) and were copied, not re-imported. CLI 0.3 KAS A1→A2 and MCP 0.9 KAS A2→A1 broadcast and were accepted on mainnet; per-transaction and daily caps rejected as expected. Fixes from the run: the pre-build cap message no longer shows a misleading "fee 0" ("before fee"), and JSON output keeps '+' readable instead of `\u002B` (relaxed encoder; output is never embedded in HTML).

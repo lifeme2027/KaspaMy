@@ -36,6 +36,8 @@ public static class WalletTools
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // Readable '+', apostrophes etc. in messages; output is a JSON text block, never embedded in HTML.
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public static bool MainnetAllowed => Environment.GetEnvironmentVariable(AllowMainnetEnv) == "1";
@@ -269,7 +271,7 @@ public static class WalletTools
     {
         var max = MaxSompi(n);
         if (amount + fee > max)
-            throw new UserException($"Amount {Kas.Format(amount)} KAS + fee {Kas.Format(fee)} KAS exceeds the per-transaction limit of {Kas.Format(max)} KAS on {n.Id()} " +
+            throw new UserException((fee == 0 ? $"Amount {Kas.Format(amount)} KAS (before fee)" : $"Amount {Kas.Format(amount)} KAS + fee {Kas.Format(fee)} KAS") + $" exceeds the per-transaction limit of {Kas.Format(max)} KAS on {n.Id()} " +
                 $"(configure with {(n == WalletNetwork.Mainnet ? MaxMainnetEnv : MaxTestnetEnv)}).");
     }
 

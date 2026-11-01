@@ -17,6 +17,7 @@ public static class CliApp
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, // readable '+' and quotes in messages
     };
 
     /// <summary>For tests: Argon2 parameters (defaults to production parameters).</summary>
