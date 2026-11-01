@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{9C175C41-6849-4106-86DA-F6DA536D180F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KaspaMy.Core", "src\KaspaMy.Core\KaspaMy.Core.csproj", "{2F3EAA53-85F7-46D8-861B-39544C17F121}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KaspaMy.Cli", "src\KaspaMy.Cli\KaspaMy.Cli.csproj", "{FBD144D0-633D-4640-80DF-445243EBB362}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KaspaMy.Mcp", "src\KaspaMy.Mcp\KaspaMy.Mcp.csproj", "{47A51839-8233-49B7-8EBE-D3796BE2CBE1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B2F0237E-C739-45A9-9594-B77F9A38FD8A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KaspaMy.Tests", "tests\KaspaMy.Tests\KaspaMy.Tests.csproj", "{F4E00BEE-A17C-43A3-ABD6-4A77105444BD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2F3EAA53-85F7-46D8-861B-39544C17F121}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2F3EAA53-85F7-46D8-861B-39544C17F121}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2F3EAA53-85F7-46D8-861B-39544C17F121}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2F3EAA53-85F7-46D8-861B-39544C17F121}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FBD144D0-633D-4640-80DF-445243EBB362}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FBD144D0-633D-4640-80DF-445243EBB362}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FBD144D0-633D-4640-80DF-445243EBB362}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FBD144D0-633D-4640-80DF-445243EBB362}.Release|Any CPU.Build.0 = Release|Any CPU
+		{47A51839-8233-49B7-8EBE-D3796BE2CBE1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{47A51839-8233-49B7-8EBE-D3796BE2CBE1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{47A51839-8233-49B7-8EBE-D3796BE2CBE1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{47A51839-8233-49B7-8EBE-D3796BE2CBE1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4E00BEE-A17C-43A3-ABD6-4A77105444BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4E00BEE-A17C-43A3-ABD6-4A77105444BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4E00BEE-A17C-43A3-ABD6-4A77105444BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4E00BEE-A17C-43A3-ABD6-4A77105444BD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{2F3EAA53-85F7-46D8-861B-39544C17F121} = {9C175C41-6849-4106-86DA-F6DA536D180F}
+		{FBD144D0-633D-4640-80DF-445243EBB362} = {9C175C41-6849-4106-86DA-F6DA536D180F}
+		{47A51839-8233-49B7-8EBE-D3796BE2CBE1} = {9C175C41-6849-4106-86DA-F6DA536D180F}
+		{F4E00BEE-A17C-43A3-ABD6-4A77105444BD} = {B2F0237E-C739-45A9-9594-B77F9A38FD8A}
+	EndGlobalSection
+EndGlobal

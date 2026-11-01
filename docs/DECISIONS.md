@@ -1,0 +1,15 @@
+# Design decisions
+
+1. **NKaspa as a pinned dependency.** `NKaspa` `[0.1.10-alpha]` from nuget.org (exact). KaspaMy never forks or patches it and does not reimplement core crypto; gaps go to `NKASPA-REQUESTS.md`.
+2. **Reuse KasNetWallet.** Keystore, HD account, secret handling, wRPC node wrapper, mass/fee policy and transfer service were copied and namespaced from KasNetWallet (same author, MIT), each with an attribution header. The keystore format (AD prefix `kdw-keystore`) stays compatible.
+3. **Keystore.** AES-256-GCM, Argon2id (Konscious 1.3.1; 64 MiB / t=3 / p=4). Files are written owner-only where the OS allows. One wallet per network: `wallet.<network>.json` under `ApplicationData/KaspaMy` or `KASPAMY_HOME`. Existing wallets are never overwritten.
+4. **One address.** Receive/change both use `m/44'/111111'/0'/0/0` (same as KasNetWallet). Simple, matches the test vector; no address gap scanning.
+5. **Testnet-10 by default.** Mainnet needs `--network mainnet` on every CLI `send`, a different typed confirmation (`SEND MAINNET`), and for MCP, `KASPAMY_MCP_ALLOW_MAINNET=1`.
+6. **Secrets.** Mnemonics are wrapped in `SecretText` (masked `ToString`, refuses JSON serialisation). Every log line and MCP response passes through `SecretRedactor`. The only reveal path is `kaspamy export-mnemonic` (interactive TTY + typed `I UNDERSTAND`). MCP takes a mnemonic as *input* to `wallet_import` but never echoes it, and `wallet_create` never returns one. Tests check stdout/stderr of the real MCP process.
+7. **Password sources.** CLI: prompt, or `KASPAMY_PASSWORD` (documented as less secure). MCP: `KASPAMY_PASSWORD` only — no tool parameter exists, so a model can't see or invent it.
+8. **Nodes.** JSON wRPC only (NKaspa's client). Mainnet default is NKaspa's sample node `eva.kaspa.green`. KasNetWallet defaults TN10 to a local node (`ws://127.0.0.1:18210`); KaspaMy instead uses public PNN TN10 nodes verified on 2026-11-01 (`vector-10.kaspa.green`, `muon-10.kaspa.blue`), and falls back to a minimal PNN resolver client (NKaspa has none). Each connection checks network id, sync state and UTXO index before use.
+9. **Fees.** Transactions are built with the node's fee estimate and DAA-aware mass policy (from KasNetWallet). `fee`/`estimate_fee` without a transaction give an approximation (typical 1-in/2-out mass 2036 × max(normal feerate, 100)); with a recipient and amount, MCP builds the exact transaction without broadcasting.
+10. **MCP send guard rails.** Testnet default, mainnet opt-in, per-transaction cap (10 / 1 KAS, env configurable), `confirm=true` required, and transfers with fee warnings are refused (use the CLI to review).
+11. **Logging.** Core logs through `WalletLog` → stderr only (redacted). The MCP host's own logging is also routed to stderr, so stdout carries JSON-RPC only.
+12. **CLI parser.** Hand-rolled to avoid a pre-release System.CommandLine dependency; output is a stable JSON envelope.
+13. **Errors as data in MCP.** Tool failures return `{"ok":false,"error":...}` text content rather than protocol errors, so assistants can show the reason.
