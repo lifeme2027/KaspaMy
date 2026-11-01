@@ -70,7 +70,7 @@ Tools: `wallet_create` (never returns the phrase; tells you to run `kaspamy expo
 | `KASPAMY_PASSWORD` | Required for create/import/send, and to show a (verified) address or balance. Only source of the password. |
 | `KASPAMY_MCP_ALLOW_MAINNET=1` | Enable mainnet (off by default). |
 | `KASPAMY_MCP_MAX_KAS_TESTNET` / `KASPAMY_MCP_MAX_KAS_MAINNET` | Per-transaction cap on amount **+ fee** (default 10 / 1 KAS). |
-| `KASPAMY_MCP_DAILY_MAX_KAS_TESTNET` / `KASPAMY_MCP_DAILY_MAX_KAS_MAINNET` | Cumulative amount + fee per **UTC** calendar day, persisted in `mcp-spend.json` (0600) across restarts (default 50 / 2 KAS). A missing (after first use), empty, `null`, unreadable or future-dated ledger blocks all MCP sends until you delete `mcp-spend.json` and `mcp-spend.anchor` by hand. Limit values must be plain positive decimals; invalid values fall back to the default and values above 1,000,000 KAS are clamped. |
+| `KASPAMY_MCP_DAILY_MAX_KAS_TESTNET` / `KASPAMY_MCP_DAILY_MAX_KAS_MAINNET` | Cumulative amount + fee per **UTC** calendar day, persisted in `mcp-spend.json` (0600) across restarts (default 50 / 2 KAS). A missing (after first use), empty, `null`, unreadable or future-dated ledger blocks all MCP sends until you delete `mcp-spend.json` and `mcp-spend.anchor` by hand. Limit values are plain non-negative decimals in KAS (`5`, `0.5`; no `1e3`, no `5,5`). **`0` forbids sending on that network.** A negative or otherwise invalid value makes `kaspamy-mcp` refuse to start (message on stderr, exit code 78); there is no fallback to the default. Values above 1,000,000 KAS are clamped with a warning. Unset or blank = default. |
 | `KASPAMY_MCP_ALLOW_IMPORT=1` | Enable `wallet_import` (off by default: a phrase typed into an AI chat is exposed to the model, its provider and logs; use `kaspamy import` instead). |
 | `KASPAMY_MCP_NODES` | Comma-separated extra node URLs the agent may pass as `node`. Allowed otherwise: the built-in public nodes and `KASPAMY_NODE`. Anything else is rejected. |
 | `KASPAMY_VERBOSE=1` | Info logs on stderr. |
@@ -93,6 +93,10 @@ Claude Desktop (`claude_desktop_config.json`) or Cursor (`~/.cursor/mcp.json`):
 ```
 
 Or without publishing: `"command": "dotnet", "args": ["run", "--project", "/path/to/kaspamy/src/KaspaMy.Mcp"]`.
+
+### Daily-limit ledger: known limitation
+
+The daily ledger (`mcp-spend.json` + `mcp-spend.anchor` in `KASPAMY_HOME`) protects against a misbehaving agent, **not** against someone with write access to `KASPAMY_HOME`. Such a user can reset today's total by deleting both files (treated as first use) or by rewriting `Day` to a past date; the anchor is only created by the first real send, so an install that never sent has no anchor. Anyone with that access can normally also read `KASPAMY_PASSWORD`, so keep `KASPAMY_HOME` private (0700) and do not give the agent shell or file-write access to it.
 
 ## Docs
 

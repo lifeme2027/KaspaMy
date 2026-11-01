@@ -108,25 +108,80 @@ public class RetestTests
         Assert.Throws<UserException>(() => SpendLedger.Reserve(Tn, ulong.MaxValue, ulong.MaxValue));
     }
 
-    // ---------- N3 ----------
+    // ---------- N3 / R2 ----------
     [Theory]
     [InlineData("999999999999", 1_000_000)]
     [InlineData("79228162514264337593543950335", 1_000_000)]
-    [InlineData("1e30", 10)]
-    [InlineData("-5", 10)]
-    [InlineData("0", 10)]
-    [InlineData("abc", 10)]
     [InlineData(" 2.5 ", 2.5)]
-    public async Task N3_limit_env_is_validated_and_clamped(string value, double expectKas)
+    [InlineData("", 10)]
+    public async Task N3_limit_env_is_clamped(string value, double expectKas)
     {
         using var h = new TempHome();
         h.Set(WalletTools.MaxTestnetEnv, value);
         h.Set(WalletTools.DailyTestnetEnv, value);
         Assert.Equal((ulong)((decimal)expectKas * 100_000_000m), WalletTools.MaxSompi(Tn));
+        Assert.Empty(WalletTools.ValidateLimitEnv());
         var st = P(await WalletTools.WalletStatus(null));
         Assert.True(st.GetProperty("ok").GetBoolean());
-        Assert.DoesNotContain("Overflow", st.ToString());
         Assert.DoesNotContain("Overflow", await WalletTools.SendKas(Vectors.Testnet, "1", null, true, null));
+    }
+
+    [Theory]
+    [InlineData("1e30")] [InlineData("1e3")] [InlineData("-5")] [InlineData("-0.1")] [InlineData("abc")] [InlineData("5,5")] [InlineData("NaN")]
+    public async Task R2_invalid_or_negative_limit_is_a_config_error_not_the_default(string value)
+    {
+        foreach (var env in WalletTools.LimitEnvs)
+        {
+            using var h = new TempHome();
+            h.Set(env, value);
+            var errs = WalletTools.ValidateLimitEnv();
+            Assert.Single(errs);
+            Assert.Contains(env, errs[0]);
+            // even if it slipped past startup, tools fail closed instead of using the default
+            h.Set("KASPAMY_PASSWORD", Vectors.Password);
+            h.Set(WalletTools.AllowMainnetEnv, "1");
+            var net = env.EndsWith("MAINNET") ? "mainnet" : null;
+            var r = P(await WalletTools.SendKas(net == null ? Vectors.Testnet : Vectors.Mainnet, "0.1", net, true, null));
+            Assert.False(r.GetProperty("ok").GetBoolean());
+            Assert.Contains("is invalid", r.GetProperty("error").GetString());
+        }
+    }
+
+    [Fact]
+    public async Task R2_zero_limit_forbids_sending_on_that_network_only()
+    {
+        foreach (var env in WalletTools.LimitEnvs)
+        {
+            using var h = new TempHome();
+            h.Set(env, "0");
+            h.Set("KASPAMY_PASSWORD", Vectors.Password);
+            h.Set(WalletTools.AllowMainnetEnv, "1");
+            Assert.Empty(WalletTools.ValidateLimitEnv());
+            var mainnet = env.EndsWith("MAINNET");
+            var (addr, net, other, otherNet) = mainnet ? (Vectors.Mainnet, "mainnet", Vectors.Testnet, (string?)null) : (Vectors.Testnet, (string?)null, Vectors.Mainnet, "mainnet");
+            var r = P(await WalletTools.SendKas(addr, "0.00000001", net, true, null));
+            Assert.Contains("Sending is disabled", r.GetProperty("error").GetString());
+            Assert.True(P(await WalletTools.WalletStatus(net)).GetProperty("data").GetProperty("sendingDisabled").GetBoolean());
+            Assert.DoesNotContain("Sending is disabled", await WalletTools.SendKas(other, "0.1", otherNet, true, null));
+        }
+    }
+
+    [Fact]
+    public async Task R2_mcp_server_refuses_to_start_with_invalid_limit()
+    {
+        using var h = new TempHome();
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true, UseShellExecute = false };
+        psi.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "kaspamy-mcp.dll"));
+        psi.Environment["KASPAMY_HOME"] = h.Dir;
+        psi.Environment[WalletTools.DailyMainnetEnv] = "-1";
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        var err = await p.StandardError.ReadToEndAsync();
+        var outText = await p.StandardOutput.ReadToEndAsync();
+        await p.WaitForExitAsync();
+        Assert.Equal(78, p.ExitCode);
+        Assert.Contains("configuration error: KASPAMY_MCP_DAILY_MAX_KAS_MAINNET='-1' is invalid", err);
+        Assert.Contains("refusing to start", err);
+        Assert.Equal("", outText);
     }
 
     [Fact]

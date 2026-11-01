@@ -5,6 +5,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+// R2: invalid limit configuration is a startup error, never a silent fallback to the defaults.
+var limitErrors = KaspaMy.Mcp.WalletTools.ValidateLimitEnv();
+if (limitErrors.Count > 0)
+{
+    foreach (var e in limitErrors) Console.Error.WriteLine("kaspamy-mcp: configuration error: " + e);
+    Console.Error.WriteLine("kaspamy-mcp: refusing to start.");
+    return 78; // EX_CONFIG
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
@@ -15,3 +24,4 @@ builder.Services.AddMcpServer(o => o.ServerInfo = new() { Name = "kaspamy", Vers
     .WithStdioServerTransport()
     .WithToolsFromAssembly();
 await builder.Build().RunAsync();
+return 0;

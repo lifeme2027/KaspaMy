@@ -46,22 +46,36 @@ public static class WalletTools
     /// <summary>N3: upper bound for any configured limit (well below ulong overflow; above the KAS max supply is meaningless).</summary>
     public const decimal LimitCeilingKas = 1_000_000m;
 
-    /// <summary>N3: parses a KAS limit env var. Invalid, zero or negative -> default; above the ceiling -> clamped; sub-sompi digits truncated.
-    /// Never throws, so a bad value cannot turn into an overflow or an unexpected error.</summary>
+    /// <summary>R2: a limit env var that is not a valid non-negative plain decimal.</summary>
+    public sealed class LimitConfigException : UserException { public LimitConfigException(string m) : base(m) { } }
+
+    public static readonly string[] LimitEnvs = { MaxTestnetEnv, MaxMainnetEnv, DailyTestnetEnv, DailyMainnetEnv };
+
+    /// <summary>
+    /// R2/N3: parses a KAS limit env var. Unset or blank -> default. "0" -> 0 = sending forbidden on that network.
+    /// Negative, non-numeric, exponent or comma forms -> <see cref="LimitConfigException"/> (the server refuses to start;
+    /// if the env somehow changes later, tools fail closed). Above the ceiling -> clamped with a warning; sub-sompi digits truncated.
+    /// </summary>
     internal static ulong KasEnv(string env, decimal def)
     {
         var v = Environment.GetEnvironmentVariable(env);
-        decimal kas = def;
-        if (!string.IsNullOrWhiteSpace(v))
-        {
-            if (decimal.TryParse(v.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var d) && d > 0)
-            {
-                kas = d;
-                if (kas > LimitCeilingKas) { WalletLog.Warn($"{env}={v} is above the ceiling; using {LimitCeilingKas} KAS."); kas = LimitCeilingKas; }
-            }
-            else WalletLog.Warn($"{env} is not a positive decimal; using the default {def} KAS.");
-        }
+        if (string.IsNullOrWhiteSpace(v)) return (ulong)(def * Kas.SompiPerKas);
+        if (!decimal.TryParse(v.Trim(), NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var kas) || kas < 0)
+            throw new LimitConfigException($"{env}='{v}' is invalid: use a plain non-negative decimal in KAS (e.g. 5 or 0.5; 0 forbids sending; no exponent or thousands separators).");
+        if (kas > LimitCeilingKas) { WalletLog.Warn($"{env}={v} is above the ceiling; using {LimitCeilingKas} KAS."); kas = LimitCeilingKas; }
         return (ulong)decimal.Truncate(kas * Kas.SompiPerKas);
+    }
+
+    /// <summary>R2: called at server startup. Returns the error messages for every invalid limit env var (empty = OK).</summary>
+    public static IReadOnlyList<string> ValidateLimitEnv()
+    {
+        var errors = new List<string>();
+        foreach (var n in new[] { WalletNetwork.Testnet10, WalletNetwork.Mainnet })
+        {
+            try { MaxSompi(n); } catch (LimitConfigException ex) { errors.Add(ex.Message); }
+            try { DailyMaxSompi(n); } catch (LimitConfigException ex) { errors.Add(ex.Message); }
+        }
+        return errors;
     }
 
     /// <summary>Per-transaction cap on amount + fee (F6).</summary>
@@ -200,6 +214,7 @@ public static class WalletTools
             mainnetAllowed = MainnetAllowed,
             importAllowed = ImportAllowed,
             maxSendKas = Kas.Format(MaxSompi(n)),
+            sendingDisabled = MaxSompi(n) == 0 || DailyMaxSompi(n) == 0,
             dailyMaxKas = Kas.Format(DailyMaxSompi(n)),
             sentTodayKas = SentTodayText(n),
         }));
@@ -257,6 +272,9 @@ public static class WalletTools
     {
         var n = Net(network);
         if (!confirm) throw new UserException("send_kas requires confirm=true after the user has approved the recipient, amount and network.");
+        if (MaxSompi(n) == 0 || DailyMaxSompi(n) == 0) // R2: 0 = forbidden
+            throw new UserException($"Sending is disabled on {n.Id()} by the server configuration " +
+                $"({(n == WalletNetwork.Mainnet ? MaxMainnetEnv + " / " + DailyMainnetEnv : MaxTestnetEnv + " / " + DailyTestnetEnv)} = 0).");
         var amount = Kas.ParseKas(amountKas);
         CheckCap(n, amount, 0);
         var nodeUrl = CheckNode(n, node);
