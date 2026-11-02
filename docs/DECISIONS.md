@@ -1,6 +1,6 @@
 # Design decisions
 
-1. **NKaspa as a pinned dependency.** `NKaspa` `[0.1.10-alpha]` from nuget.org (exact). KaspaMy never forks or patches it and does not reimplement core crypto; gaps go to `NKASPA-REQUESTS.md`.
+1. **NKaspa as a pinned dependency.** `NKaspa` `[0.1.11-alpha]` from nuget.org (exact). KaspaMy never forks or patches it and does not reimplement core crypto; gaps go to `NKASPA-REQUESTS.md`.
 2. **Reuse KasNetWallet.** Keystore, HD account, secret handling, wRPC node wrapper, mass/fee policy and transfer service were copied and namespaced from KasNetWallet (same author, MIT), each with an attribution header. The keystore format (AD prefix `kdw-keystore`) stays compatible.
 3. **Keystore.** AES-256-GCM, Argon2id (Konscious 1.3.1; 64 MiB / t=3 / p=4). Files are written owner-only where the OS allows. One wallet per network: `wallet.<network>.json` under `ApplicationData/KaspaMy` or `KASPAMY_HOME`. Existing wallets are never overwritten.
 4. **One address.** Receive/change both use `m/44'/111111'/0'/0/0` (same as KasNetWallet). Simple, matches the test vector; no address gap scanning.

@@ -1,6 +1,6 @@
 # NKaspa feature requests (for 本地1)
 
-KaspaMy depends on `NKaspa` **0.1.10-alpha** (exact pin) and does not modify it. These are gaps found while building KaspaMy. Workarounds live in KaspaMy only until NKaspa covers them.
+KaspaMy depends on `NKaspa` **0.1.11-alpha** (exact pin) and does not modify it. These are gaps found while building KaspaMy. Workarounds live in KaspaMy only until NKaspa covers them.
 
 ## R1 — Public node resolver
 NKaspa ships no equivalent of rusty-kaspa's `Resolver` (`rpc/wrpc/client/Resolvers.toml`, `GET {resolver}/v2/kaspa/{network}/{tls|any}/wrpc/json`).

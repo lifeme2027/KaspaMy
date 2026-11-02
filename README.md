@@ -6,7 +6,7 @@ A small, self-custodial Kaspa wallet for the command line and for AI assistants 
 - `kaspamy-mcp` — stdio [Model Context Protocol](https://modelcontextprotocol.io) server (official C# SDK, `ModelContextProtocol` 1.2.0).
 - `KaspaMy.Core` — keystore, HD derivation, node access, transaction building.
 
-Kaspa primitives (BIP39, BIP32, addresses, signing, wRPC JSON client) come from **[NKaspa](https://www.nuget.org/packages/NKaspa) `0.1.10-alpha`**, pinned exactly (`[0.1.10-alpha]`) from nuget.org. Wallet code is adapted from KasNetWallet (same author, MIT); see file headers.
+Kaspa primitives (BIP39, BIP32, addresses, signing, wRPC JSON client) come from **[NKaspa](https://www.nuget.org/packages/NKaspa) `0.1.11-alpha`**, pinned exactly (`[0.1.11-alpha]`) from nuget.org. Wallet code is adapted from KasNetWallet (same author, MIT); see file headers.
 
 ## ⚠️ Security warnings — read first
 

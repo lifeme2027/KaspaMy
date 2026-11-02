@@ -11,6 +11,6 @@
   <ItemGroup>
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="[1.3.1]" />
     <!-- Exact pin. Do not float: NKaspa is alpha and its API changes between releases. -->
-    <PackageReference Include="NKaspa" Version="[0.1.10-alpha]" />
+    <PackageReference Include="NKaspa" Version="[0.1.11-alpha]" />
   </ItemGroup>
 </Project>
